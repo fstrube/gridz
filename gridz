@@ -1,0 +1,136 @@
+#!/usr/bin/env python
+import gtk.gdk
+import keybinder
+import math
+import os
+import sys
+
+class Gridz:
+	def __init__(self):
+		self._NAME = "Gridz"
+		self._VERSION = "0.1"
+		self._AUTHORS = [
+			"Franklin P. Strube\nhttp://franklinstrube.com"
+		]
+		self._INI = os.path.expanduser('~')+"/.gridz"
+		
+		self._defaults = {
+			"shrink-left"  : "<Super>Left",
+			"shrink-up"    : "<Super>Up",
+			"shrink-down"  : "<Super>Down",
+			"shrink-right" : "<Super>Right",
+			"grow-left"    : "<Super><Ctrl>Left",
+			"grow-up"      : "<Super><Ctrl>Up",
+			"grow-down"    : "<Super><Ctrl>Down",
+			"grow-right"   : "<Super><Ctrl>Right"
+		}
+		self._hotkeys = {}
+		for toggle in self._defaults:
+			self._hotkeys[toggle] = self._defaults[toggle]
+		
+		# TODO parse user config hotkeys
+		
+		for toggle in self._hotkeys:
+			keybinder.bind(self._hotkeys[toggle], self.grid_callback, toggle)
+		
+		gtk.main()
+		
+	def grid_callback(self, toggle):
+		active = self._get_active_window()
+		screen = gtk.gdk.Screen()
+		monitor = screen.get_monitor_at_window(active)
+		rect = screen.get_monitor_geometry(monitor)
+
+		# Calculate the size of the wm decorations
+		relativex, relativey, winw, winh, d = active.get_geometry() 
+		w = winw# + (relativex*2)
+		h = winh# + (relativey)
+
+		# Calculate the position of where the wm decorations start (not the window itself)
+		screenposx, screenposy = active.get_root_origin()
+		
+		growx = math.ceil(rect.width / 5)
+		growy = math.ceil(rect.height / 5)
+		
+		
+		# Shrinking
+		if toggle == 'shrink-left':
+			width = rect.width
+			while width >= w and width > growx:
+				width = max(growx, width - growx)
+			x = 0
+			y = screenposy
+			height = h
+		elif toggle == 'shrink-right':
+			width = rect.width
+			while width >= w and width > growx:
+				width = max(growx, width - growx)
+			x = rect.width - int(width)
+			y = screenposy
+			height = h
+		elif toggle == 'shrink-up':
+			height = rect.height
+			while height >= h and height > growy:
+				height = max(growy, height - growy)
+			y = 0
+			x = screenposx
+			width = w
+		elif toggle == 'shrink-down':
+			height = rect.height
+			while height >= h and height > growy:
+				height = max(growy, height - growy)
+			y = rect.height - int(height)
+			x = screenposx
+			width = w
+		# Growing
+		elif toggle == 'grow-left':
+			width = growx
+			while width <= w and width < rect.width:
+				width = width + growx
+			x = 0
+			y = screenposy
+			height = h
+		elif toggle == 'grow-right':
+			width = growx
+			while width <= w and width < rect.width:
+				width = width + growx
+			x = rect.width - int(width)
+			y = screenposy
+			height = h
+		elif toggle == 'grow-up':
+			height = growy
+			while height <= h and height < rect.height:
+				height = height + growy
+			y = 0
+			x = screenposx
+			width = w
+		elif toggle == 'grow-down':
+			height = growy
+			while height <= h and height < rect.height:
+				height = height + growy
+			y = rect.height - int(height)
+			x = screenposx
+			width = w
+			
+		# Move and resize the window
+		width = min(rect.width,max(growx,width))
+		height = min(rect.height,max(growy,height))
+		x = max(0,x)
+		y = max(0,y)
+		active.move_resize(int(x), int(y), int(width), int(height))
+		
+	def _get_active_window(self):
+		# Get the root and active window
+		root = gtk.gdk.screen_get_default()
+		if root.supports_net_wm_hint("_NET_ACTIVE_WINDOW") and root.supports_net_wm_hint("_NET_WM_WINDOW_TYPE"):
+			active = root.get_active_window()
+			if active.property_get("_NET_WM_WINDOW_TYPE")[-1][0] == '_NET_WM_WINDOW_TYPE_DESKTOP' :
+				return False
+
+		else:
+			return False
+	
+		return active
+
+if __name__ == '__main__':
+	Gridz()
