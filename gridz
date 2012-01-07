@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import gtk.gdk
-import keybinder
 import math
 import os
 import sys
@@ -28,12 +27,80 @@ class Gridz:
 		for toggle in self._defaults:
 			self._hotkeys[toggle] = self._defaults[toggle]
 		
-		# TODO parse user config hotkeys
+		# Parse user config hotkeys
+		self._init_settings()
 		
-		for toggle in self._hotkeys:
-			keybinder.bind(self._hotkeys[toggle], self.grid_callback, toggle)
+		# Bind hotkeys
+		self._init_keys()
 		
-		gtk.main()
+		# Setup the systray
+		self._init_taskbar()
+		
+	def _get_active_window(self):
+		# Get the root and active window
+		root = gtk.gdk.screen_get_default()
+		if root.supports_net_wm_hint("_NET_ACTIVE_WINDOW") and root.supports_net_wm_hint("_NET_WM_WINDOW_TYPE"):
+			active = root.get_active_window()
+			if active.property_get("_NET_WM_WINDOW_TYPE")[-1][0] == '_NET_WM_WINDOW_TYPE_DESKTOP' :
+				return False
+
+		else:
+			return False
+	
+		return active
+	
+	def _init_keys(self):
+		# Detect python-keybinder
+		try:
+			import keybinder
+			
+			print self._hotkeys
+		
+			for toggle in self._hotkeys:
+				keybinder.bind(self._hotkeys[toggle], self.grid_callback, toggle)
+		
+		except:
+			# Show an error dialog
+			link = gtk.LinkButton("http://kaizer.se/wiki/keybinder/", "Python Keybinder Homepage")
+			link.show()
+			
+			dialog = gtk.MessageDialog(type=gtk.MESSAGE_ERROR, buttons=gtk.BUTTONS_OK, message_format="In order to use Gridz, you must have the Python Keybinder library installed.")
+			dialog.set_title("Fatal Error: Missing required dependency")
+			dialog.get_message_area().pack_start(link)
+
+			response = dialog.run()
+			exit(127)
+			
+	def _init_settings(self):
+		_hotkeys = False
+		_preferences = False
+		
+		if not os.path.exists(self._INI):
+			return False
+		
+		f = open(self._INI, 'r')
+		
+		for line in f:
+			line = line.rstrip().lstrip()
+			if line.find('#') == 0:
+				continue
+				
+			if line.upper() == "[HOTKEYS]":
+				_hotkeys = True
+			elif line.upper() == "[PREFERENCES]":
+				_preferences = True
+			elif _hotkeys:
+				# Add hotkey to the mix
+				toggle, hotkey = line.split('=')
+				self._hotkeys[toggle] = hotkey
+			elif _preferences:
+				# Set preferences
+				key, value = line.split('=')
+				self._options[key] = value
+		
+	def _init_taskbar(self):
+		print "Initializing taskbar..."
+		self._taskbar = GridzTaskbar(self)
 		
 	def grid_callback(self, toggle):
 		active = self._get_active_window()
@@ -119,18 +186,53 @@ class Gridz:
 		y = max(0,y)
 		active.move_resize(int(x), int(y), int(width), int(height))
 		
-	def _get_active_window(self):
-		# Get the root and active window
-		root = gtk.gdk.screen_get_default()
-		if root.supports_net_wm_hint("_NET_ACTIVE_WINDOW") and root.supports_net_wm_hint("_NET_WM_WINDOW_TYPE"):
-			active = root.get_active_window()
-			if active.property_get("_NET_WM_WINDOW_TYPE")[-1][0] == '_NET_WM_WINDOW_TYPE_DESKTOP' :
-				return False
-
-		else:
-			return False
+	def quit(self, widget=None):
+		print widget
+		gtk.main_quit()
+		sys.exit()
 	
-		return active
-
+	def show_about_dialog(self, widget=None):
+		link = gtk.LinkButton("http://github.com/fstrube/gridz", "Gridz on GitHub")
+		link.show()
+			
+		dialog = gtk.MessageDialog(None, 0, gtk.MESSAGE_ERROR, gtk.BUTTONS_CLOSE, "Gridz: Window Resizing Utility for Linux")
+		dialog.set_title("About Gridz")
+		dialog.get_message_area().pack_start(link)
+		
+		def response(dialog, response_id):
+			if response_id == gtk.RESPONSE_CLOSE:
+				dialog.destroy()
+			
+		dialog.connect("response", response)
+		
+		dialog.run()
+		
+class GridzTaskbar(gtk.StatusIcon):
+	def __init__(self, app):
+		gtk.StatusIcon.__init__(self)
+		self._app = app
+		self._initIcon()
+		self._initMenu()
+		
+	def _initIcon(self):
+		# Setup the icon
+		self.set_from_stock(gtk.STOCK_FULLSCREEN)
+		
+	def _initMenu(self):
+		# Setup the menu
+		about = gtk.MenuItem(label="About")
+		about.connect("activate", self._app.show_about_dialog)
+		quit = gtk.MenuItem(label="Quit Gridz")
+		quit.connect("activate", self._app.quit)
+		self._menu = gtk.Menu()
+		self._menu.append(about)
+		self._menu.append(quit)
+		self.connect("popup-menu", self._popup_menu)
+		
+	def _popup_menu(self, icon, button, time):
+		self._menu.show_all()
+		self._menu.popup(None, None, gtk.status_icon_position_menu, button, time, self)
+		
 if __name__ == '__main__':
 	Gridz()
+	gtk.main()
